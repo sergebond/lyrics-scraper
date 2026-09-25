@@ -51,6 +51,38 @@ interface ScrapeResult {
 если нужен другой формат/структура, преобразуй `songs` сам, а не трогай
 внутренности склада.
 
+### Только список песен, без текста и аккордов
+
+Если нужно узнать, какие песни вообще есть у исполнителя (названия), а не
+скачивать их текст — используй `listSongs`, а не `scrapeArtist`. Она не
+трогает страницы отдельных песен, только страницу исполнителя — быстрее и
+не тянет лишнего:
+
+```ts
+interface ListSongsOptions {
+  artist: string;
+  count?: number;    // не задано — вернутся все найденные песни
+  source?: "amdm" | "mytabs" | "guitaretab" | "lacuerda";
+  onProgress?: (message: string) => void;
+}
+
+interface ListSongsResult {
+  artist: string;
+  source: string;
+  songs: { title: string; url: string; views: number }[]; // без text/аккордов
+}
+```
+
+```ts
+import { listSongs } from "lyrics-scraper";
+
+const { songs } = await listSongs({ artist: "ДДТ" }); // все песни, только метаданные
+```
+
+На acordes.lacuerda.net у `views` нет реального смысла (сайт не публикует
+ни просмотры, ни рейтинг) — там это просто порядок на странице исполнителя.
+Не строй логику на сравнении `views` между разными исполнителями/источниками.
+
 ### Ошибки
 
 Если исполнителя не нашли **нигде** — `scrapeArtist` бросает `Error` с
@@ -113,6 +145,8 @@ npx tsx src/cli.ts --artist ddt --songs "Дождь" "Метель"
 npx tsx src/cli.ts --artist ddt --count 5 --output my_file.txt
 npx tsx src/cli.ts --artist ddt --count 5 --stdout          # текст в stdout, файл не создаётся
 npx tsx src/cli.ts --artist ddt --count 5 --stdout > out.txt # то же самое, просто перенаправили сами
+npx tsx src/cli.ts --artist ddt --list                       # только список названий, без скачивания
+npx tsx src/cli.ts --artist ddt --list --count 10 --stdout
 ```
 
 По умолчанию результат — файл `<slug>_songs.txt` (или указанный через
@@ -153,3 +187,7 @@ npx tsx src/cli.ts --artist ddt --count 5 --stdout > out.txt # то же сам�
 5. Не выводи содержимое `body` (текст+аккорды) в чат построчно без нужды —
    отдавай файл пользователю как артефакт/вложение, а не вставляй текст
    песни в сообщение.
+6. Если пользователь просит просто узнать/показать, какие песни есть у
+   исполнителя (без скачивания) — используй `listSongs`, а не `scrapeArtist`
+   с большим `count`: она быстрее (не ходит по страницам отдельных песен) и
+   явно сигнализирует намерение «только список».

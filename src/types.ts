@@ -70,3 +70,23 @@ export interface ScrapeResult {
   /** Песни, которые были запрошены явно (--songs), но не найдены. */
   notFound: string[];
 }
+
+export interface ListSongsOptions {
+  /** Имя исполнителя (любым языком) или slug/путь источника. */
+  artist: string;
+  /** Сколько песен вернуть (самых популярных). Не задано — вернуть все найденные. */
+  count?: number;
+  /** Форсировать конкретный источник вместо автоматического перебора. */
+  source?: SourceId;
+  /** Ход прогресса — для CLI-вывода или UI-стрима в Next.js. */
+  onProgress?: (message: string) => void;
+}
+
+export interface ListSongsResult {
+  artist: string;
+  source: string;
+  /** Список песен исполнителя (название/ссылка/просмотры), без текста и
+   * аккордов — только метаданные. Дубликаты схлопнуты, отсортировано по
+   * убыванию просмотров (нюанс для lacuerda.net — см. listSongs() в scrape.ts). */
+  songs: SongEntry[];
+}

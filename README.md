@@ -57,6 +57,27 @@ const text = buildOutputFile(result.songs); // same as what getSongsText would r
 Neither `getSongsText`, `scrapeArtist`, nor `buildOutputFile` write files —
 disk writes only happen in the CLI (`-o/--output`, see below).
 
+### Just the song list, no lyrics/chords
+
+If you only need to know what songs an artist has (titles), not download
+their lyrics, use `listSongs` instead of `scrapeArtist`. It only fetches the
+artist's page, not every individual song page — faster and doesn't pull
+anything you don't need:
+
+```ts
+import { listSongs } from "lyrics-scraper";
+
+const { songs } = await listSongs({ artist: "ДДТ" }); // all songs found, metadata only
+// songs: { title: string; url: string; views: number }[]
+```
+
+`count` works the same way as in `scrapeArtist` (limits to the top-N by
+`views`), but if omitted, `listSongs` returns *everything* found for that
+artist (unlike `scrapeArtist`, which defaults to 20). On
+acordes.lacuerda.net `views` has no real meaning (the site publishes
+neither view counts nor ratings) — there it's just the artist page's
+listing order; don't compare `views` across sources/artists.
+
 `scrapeArtist` figures out on its own where to download from: it tries
 sources in order — **amdm.ru → mytabs.ru → guitaretab.com →
 acordes.lacuerda.net** — and stops at the first one where the artist is
@@ -130,15 +151,18 @@ npx tsx src/cli.ts --artist Radiohead --source guitaretab --count 20
 npx tsx src/cli.ts --artist Shakira --source lacuerda --count 10
 npx tsx src/cli.ts --artist ddt --count 5 --output my_file.txt
 npx tsx src/cli.ts --artist ddt --count 5 --stdout          # text to stdout, no file created
+npx tsx src/cli.ts --artist ddt --list                       # just the list of titles, nothing downloaded
+npx tsx src/cli.ts --artist ddt --list --count 10 --stdout
 ```
 
 | Flag                    | Description |
 |--------------------------|----------|
 | `-a, --artist <name>`     | Artist (see above) |
-| `-n, --count <number>`    | How many of the most popular songs to download (default 20) |
+| `-l, --list`              | Only print the artist's song list (title, views, url) — no downloading |
+| `-n, --count <number>`    | How many songs to download (or list, with `--list`). Default: 20 when downloading, all when listing |
 | `-s, --songs <titles>` | One or more specific songs instead of top-N |
 | `--source <amdm\|mytabs\|guitaretab\|lacuerda>` | Force a source instead of auto-detection |
-| `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`) |
+| `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`; with `--list`, also saves the list if given) |
 | `--stdout`               | Print text to stdout instead of writing a file (progress goes to stderr) |
 
 ## Output format

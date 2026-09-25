@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
-import { scrapeArtist } from "./scrape.js";
+import { scrapeArtist, listSongs } from "./scrape.js";
 import { buildOutputFile } from "./index.js";
 import { transliterateToSlug } from "./translit.js";
 import { SOURCE_IDS, type SourceId } from "./types.js";
 
 interface Args {
   artist: string;
-  count: number;
+  count?: number;
   songs?: string[];
   source?: SourceId;
   output?: string;
   stdout: boolean;
+  list: boolean;
 }
 
 function fail(message: string): never {
@@ -20,7 +21,7 @@ function fail(message: string): never {
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { artist: "ДДТ", count: 20, stdout: false };
+  const args: Args = { artist: "ДДТ", stdout: false, list: false };
 
   let i = 0;
   // Значение следующего аргумента для флага flag — с проверкой, что оно
@@ -73,6 +74,10 @@ function parseArgs(argv: string[]): Args {
       case "--stdout":
         args.stdout = true;
         break;
+      case "-l":
+      case "--list":
+        args.list = true;
+        break;
       case "-h":
       case "--help":
         printHelp();
@@ -95,38 +100,75 @@ function printHelp() {
 Опции:
   -a, --artist <имя>       Исполнитель: имя ("Земфира") или slug/путь сайта ("zemfira").
                             Для mytabs.ru с явным путём: "v-r/viktor-tsoj". По умолчанию: "ДДТ".
-  -n, --count <число>       Сколько самых популярных песен скачать. По умолчанию: 20.
+  -l, --list                Только вывести список песен исполнителя (название,
+                            просмотры, ссылка) — без скачивания текста и аккордов.
+                            С --count не задан — выводятся все найденные песни.
+  -n, --count <число>       Сколько песен скачать (или вывести списком с --list).
+                            По умолчанию: 20 при скачивании, все — с --list.
                             Игнорируется, если указан --songs.
   -s, --songs <названия...> Скачать конкретную песню или список песен по названию.
       --source <amdm|mytabs|guitaretab|lacuerda>
                             Форсировать конкретный источник вместо автоопределения.
                             По умолчанию источник ищется сам: amdm.ru → mytabs.ru →
                             guitaretab.com → acordes.lacuerda.net.
-  -o, --output <файл>       Имя выходного файла. По умолчанию: <slug>_songs.txt.
+  -o, --output <файл>       Имя выходного файла. По умолчанию: <slug>_songs.txt
+                            (с --list — список тоже сохраняется в файл, если указан).
       --stdout               Вывести текст в stdout вместо записи в файл (файл не
                             создаётся; прогресс уходит в stderr, чтобы stdout
                             содержал только чистый текст — удобно для пайпов).
   -h, --help                Показать эту справку.`);
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+function slugFor(artist: string): string {
+  return transliterateToSlug(artist.split("/").pop() ?? artist, "_") || "artist";
+}
 
+async function runList(args: Args) {
+  // Прогресс в listSongs() и есть сам список (по строке на песню) — просто
+  // направляем его в нужный поток, отдельный "результат" собирать не нужно.
+  const logProgress = args.stdout ? (m: string) => console.error(m) : (m: string) => console.log(m);
+
+  const result = await listSongs({
+    artist: args.artist,
+    count: args.count,
+    source: args.source,
+    onProgress: logProgress,
+  });
+
+  if (result.songs.length === 0) {
+    fail("Ничего не нашлось.");
+  }
+
+  if (args.stdout) {
+    const lines = result.songs.map((s, i) => `${i + 1}. ${s.title} — ${s.views.toLocaleString("ru-RU")} просмотров`);
+    process.stdout.write(lines.join("\n") + "\n");
+    return;
+  }
+
+  if (args.output) {
+    const lines = result.songs.map(
+      (s, i) => `${i + 1}. ${s.title} — ${s.views.toLocaleString("ru-RU")} просмотров\n   ${s.url}`,
+    );
+    await writeFile(args.output, lines.join("\n") + "\n", "utf-8");
+    console.log(`\n💾 Список сохранён в файл: ${args.output} (источник: ${result.source})`);
+  }
+}
+
+async function runDownload(args: Args) {
   // С --stdout прогресс уходит в stderr, чтобы в stdout попал только текст —
   // так результат можно пайпить дальше (`| pbcopy`, `> file` и т.п.).
   const logProgress = args.stdout ? (m: string) => console.error(m) : (m: string) => console.log(m);
 
   const result = await scrapeArtist({
     artist: args.artist,
-    count: args.count,
+    count: args.count ?? 20,
     songs: args.songs,
     source: args.source,
     onProgress: logProgress,
   });
 
   if (result.songs.length === 0) {
-    console.error("❌ Нечего скачивать.");
-    process.exit(1);
+    fail("Нечего скачивать.");
   }
 
   const text = buildOutputFile(result.songs);
@@ -136,11 +178,19 @@ async function main() {
     return;
   }
 
-  const slug = transliterateToSlug(args.artist.split("/").pop() ?? args.artist, "_") || "artist";
-  const outputFile = args.output ?? `${slug}_songs.txt`;
+  const outputFile = args.output ?? `${slugFor(args.artist)}_songs.txt`;
   await writeFile(outputFile, text, "utf-8");
 
   console.log(`\n💾 Сохранено в файл: ${outputFile} (источник: ${result.source})`);
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.list) {
+    await runList(args);
+  } else {
+    await runDownload(args);
+  }
 }
 
 main().catch((err) => {

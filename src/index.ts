@@ -16,25 +16,40 @@
  * и т.п.), а не только текст — используйте scrapeArtist() + buildOutputFile()
  * по отдельности (getSongsText — просто их комбинация).
  *
+ * Нужен только список песен исполнителя (названия), без текста и аккордов —
+ * используйте listSongs(), она не скачивает страницы отдельных песен:
+ *
+ *   import { listSongs } from "lyrics-scraper";
+ *   const { songs } = await listSongs({ artist: "ДДТ" }); // [{ title, url, views }, ...]
+ *
  * Работает только на сервере (Route Handler, Server Action, Node-рантайм) —
  * делает исходящие HTTP-запросы и не предназначена для клиентских компонентов.
- * Ни scrapeArtist, ни buildOutputFile, ни getSongsText не пишут файлы —
- * запись на диск (CLI, `-o/--output`) делается только в cli.ts.
+ * Ни scrapeArtist, ни buildOutputFile, ни getSongsText, ни listSongs не
+ * пишут файлы — запись на диск (CLI, `-o/--output`) делается только в cli.ts.
  *
- * Основной контракт — три функции выше (getSongsText, scrapeArtist,
- * buildOutputFile). Всё, что экспортируется ниже (formatSongBlock,
- * *Source, resolveMytabsArtistByPath) — служебный доступ для редких
- * случаев (например, принудительный source с ручным резолвингом пути на
- * mytabs.ru); в обычном использовании не нужно.
+ * Основной контракт — четыре функции выше (getSongsText, listSongs,
+ * scrapeArtist, buildOutputFile). Всё, что экспортируется ниже
+ * (formatSongBlock, *Source, resolveMytabsArtistByPath) — служебный доступ
+ * для редких случаев (например, принудительный source с ручным резолвингом
+ * пути на mytabs.ru); в обычном использовании не нужно.
  */
-export { scrapeArtist } from "./scrape.js";
+export { scrapeArtist, listSongs } from "./scrape.js";
 export { formatSongBlock, formatOutputFile as buildOutputFileFromBlocks } from "./textFormat.js";
 export { amdmSource } from "./sources/amdm.js";
 export { mytabsSource, resolveArtistByPath as resolveMytabsArtistByPath } from "./sources/mytabs.js";
 export { guitaretabSource } from "./sources/guitaretab.js";
 export { lacuerdaSource } from "./sources/lacuerda.js";
 
-export type { Song, SongEntry, ResolvedArtist, ChordSource, ScrapeOptions, ScrapeResult } from "./types.js";
+export type {
+  Song,
+  SongEntry,
+  ResolvedArtist,
+  ChordSource,
+  ScrapeOptions,
+  ScrapeResult,
+  ListSongsOptions,
+  ListSongsResult,
+} from "./types.js";
 
 import type { Song, ScrapeOptions } from "./types.js";
 import { formatSongBlock, formatOutputFile } from "./textFormat.js";
