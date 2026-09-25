@@ -28,6 +28,13 @@ export interface ResolvedArtist {
   displayName: string;
 }
 
+/** Одна находка при поиске песни по названию (исполнитель ещё не известен вызывающему). */
+export interface TitleMatch {
+  title: string;
+  artist: string;
+  url: string;
+}
+
 /**
  * Источник аккордов (сайт). Каждый источник умеет по имени исполнителя
  * найти его страницу, собрать список песен с просмотрами и разобрать
@@ -45,6 +52,10 @@ export interface ChordSource {
 
   /** Загружает и разбирает страницу конкретной песни. */
   fetchSong(url: string, fallbackArtist: string): Promise<Song | null>;
+
+  /** Поиск песни по названию сайтовым поиском, без знания исполнителя.
+   * Не у всех источников есть такой поиск — метод опциональный. */
+  searchByTitle?(title: string): Promise<TitleMatch[]>;
 }
 
 export interface ScrapeOptions {
@@ -89,4 +100,24 @@ export interface ListSongsResult {
    * аккордов — только метаданные. Дубликаты схлопнуты, отсортировано по
    * убыванию просмотров (нюанс для lacuerda.net — см. listSongs() в scrape.ts). */
   songs: SongEntry[];
+}
+
+export interface FindSongOptions {
+  /** Название песни (исполнитель не известен/не важен). */
+  title: string;
+  /** Форсировать конкретный источник. Источник должен поддерживать поиск
+   * по названию (см. ChordSource.searchByTitle) — иначе будет ошибка. */
+  source?: SourceId;
+  /** Ход прогресса — для CLI-вывода или UI-стрима в Next.js. */
+  onProgress?: (message: string) => void;
+}
+
+export interface FindSongResult {
+  title: string;
+  source: string;
+  /** Загруженные песни, подходящие под название. Обычно одна; больше одной —
+   * если сайт хранит разные исполнения (разные исполнители/аранжировки) под
+   * тем же названием. Повторные записи одной и той же пары
+   * исполнитель+название схлопнуты в одну. */
+  songs: Song[];
 }

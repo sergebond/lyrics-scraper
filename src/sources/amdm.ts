@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import type { ChordSource, ResolvedArtist, Song, SongEntry } from "../types.js";
+import type { ChordSource, ResolvedArtist, Song, SongEntry, TitleMatch } from "../types.js";
 import { fetchText, sleep } from "../http.js";
 import { slugCandidates } from "../translit.js";
 import { removeTabs, formatBody, detectKey } from "../textFormat.js";
@@ -104,9 +104,37 @@ async function fetchSong(url: string, fallbackArtist: string): Promise<Song | nu
   return { title, artist, key, url, body };
 }
 
+/**
+ * Поиск песни по названию (а не по исполнителю) через сайтовый поиск
+ * amdm.ru: /search/song/?q=... — отдельный от /search/ (тот ищет
+ * исполнителей) эндпоинт, находит песни по совпадению названия. Каждая
+ * строка результата — "<исполнитель> — <название>", обе части ссылками.
+ */
+async function searchByTitle(title: string): Promise<TitleMatch[]> {
+  const html = await fetchText(`${BASE_URL}/search/song/`, { params: { q: title } });
+  if (!html) return [];
+  const $ = cheerio.load(html);
+
+  const matches: TitleMatch[] = [];
+  $("td.artist_name").each((_, cell) => {
+    const links = $(cell).find("a.artist");
+    if (links.length < 2) return;
+    const artist = $(links[0]).text().trim();
+    const songLink = $(links[1]);
+    const href = songLink.attr("href") ?? "";
+    const songTitle = songLink.text().trim();
+    if (!artist || !href || !songTitle) return;
+    const url = href.startsWith("/") ? BASE_URL + href : href;
+    matches.push({ title: songTitle, artist, url });
+  });
+
+  return matches;
+}
+
 export const amdmSource: ChordSource = {
   id: "amdm",
   resolveArtist,
   listEntries,
   fetchSong,
+  searchByTitle,
 };

@@ -23,15 +23,30 @@ async function artistPageHasSongs(url: string): Promise<boolean> {
   return $("table tr div.list-views").length > 0;
 }
 
+/**
+ * Известные исключения, которые обычная транслитерация не решает:
+ * либо mytabs.ru каталогизирует исполнителя под именем человека, а не
+ * сценическим названием ("Кино" -> "viktor-tsoj"), либо схема
+ * транслитерации даёт слаг, отличный от реального ("Цой" транслитерируется
+ * как "coy"/"coi", а не "tsoj"). Ключи — в нижнем регистре.
+ */
+const KNOWN_ARTIST_PATHS: Record<string, string> = {
+  "кино": "v-r/viktor-tsoj",
+  "виктор цой": "v-r/viktor-tsoj",
+};
+
 async function resolveArtist(query: string): Promise<ResolvedArtist | null> {
   const candidate = query.trim();
 
-  // Явный путь вида "v-r/viktor-tsoj" — нужен для исполнителей,
-  // каталогизированных на mytabs.ru под именем человека, а не сценическим
-  // названием (например "Кино" -> "viktor-tsoj"): прямая транслитерация
-  // такие случаи не решает.
+  // Явный путь вида "v-r/viktor-tsoj" — прямой обход резолвинга по имени.
   if (candidate.includes("/")) {
     return resolveArtistByPath(candidate);
+  }
+
+  const knownPath = KNOWN_ARTIST_PATHS[candidate.toLowerCase()];
+  if (knownPath) {
+    const resolved = await resolveArtistByPath(knownPath);
+    return resolved ? { ...resolved, displayName: query } : null;
   }
 
   const candidates = /^[a-zA-Z0-9_-]+$/.test(candidate)

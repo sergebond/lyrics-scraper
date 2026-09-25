@@ -78,6 +78,24 @@ acordes.lacuerda.net `views` has no real meaning (the site publishes
 neither view counts nor ratings) — there it's just the artist page's
 listing order; don't compare `views` across sources/artists.
 
+### Find a song when you don't know the artist
+
+If you only have a song title and not the artist, use `findSong` instead of
+guessing an artist name for `scrapeArtist`. It searches the source's own
+site search by song title:
+
+```ts
+import { findSong } from "lyrics-scraper";
+
+const { songs } = await findSong({ title: "Шёлковое сердце" }); // Song[], usually one
+```
+
+Not every source supports title search (currently only amdm.ru does); when
+auto-detecting, sources without it are skipped. Forcing `source` to one that
+doesn't support it, or finding no match anywhere, throws an `Error`.
+Duplicate listings of the exact same artist+title pair (reposted/re-uploaded
+copies) are collapsed into one.
+
 `scrapeArtist` figures out on its own where to download from: it tries
 sources in order — **amdm.ru → mytabs.ru → guitaretab.com →
 acordes.lacuerda.net** — and stops at the first one where the artist is
@@ -153,16 +171,19 @@ npx tsx src/cli.ts --artist ddt --count 5 --output my_file.txt
 npx tsx src/cli.ts --artist ddt --count 5 --stdout          # text to stdout, no file created
 npx tsx src/cli.ts --artist ddt --list                       # just the list of titles, nothing downloaded
 npx tsx src/cli.ts --artist ddt --list --count 10 --stdout
+npx tsx src/cli.ts --title "Шёлковое сердце"                  # don't know the artist, search by title
+npx tsx src/cli.ts --title "Шёлковое сердце" --stdout
 ```
 
 | Flag                    | Description |
 |--------------------------|----------|
 | `-a, --artist <name>`     | Artist (see above) |
+| `-t, --title <title>`     | Find a song by title, without knowing the artist (site search). Mutually exclusive with `--artist`/`--list`/`--songs`. Not every source supports it (currently only amdm.ru) |
 | `-l, --list`              | Only print the artist's song list (title, views, url) — no downloading |
 | `-n, --count <number>`    | How many songs to download (or list, with `--list`). Default: 20 when downloading, all when listing |
 | `-s, --songs <titles>` | One or more specific songs instead of top-N |
 | `--source <amdm\|mytabs\|guitaretab\|lacuerda>` | Force a source instead of auto-detection |
-| `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`; with `--list`, also saves the list if given) |
+| `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`, or `<slug>_song.txt` with `--title`) |
 | `--stdout`               | Print text to stdout instead of writing a file (progress goes to stderr) |
 
 ## Output format

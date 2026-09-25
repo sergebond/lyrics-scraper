@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
-import { scrapeArtist, listSongs } from "./scrape.js";
+import { scrapeArtist, listSongs, findSong } from "./scrape.js";
 import { buildOutputFile } from "./index.js";
 import { transliterateToSlug } from "./translit.js";
 import { SOURCE_IDS, type SourceId } from "./types.js";
 
 interface Args {
   artist: string;
+  title?: string;
   count?: number;
   songs?: string[];
   source?: SourceId;
@@ -40,6 +41,10 @@ function parseArgs(argv: string[]): Args {
       case "-a":
       case "--artist":
         args.artist = nextValue(arg);
+        break;
+      case "-t":
+      case "--title":
+        args.title = nextValue(arg);
         break;
       case "-n":
       case "--count": {
@@ -100,6 +105,9 @@ function printHelp() {
 Опции:
   -a, --artist <имя>       Исполнитель: имя ("Земфира") или slug/путь сайта ("zemfira").
                             Для mytabs.ru с явным путём: "v-r/viktor-tsoj". По умолчанию: "ДДТ".
+  -t, --title <название>    Найти песню по названию, без указания исполнителя
+                            (поиск по сайту). Взаимоисключающе с --artist/--list/--songs.
+                            Поддерживают не все источники (сейчас — amdm.ru).
   -l, --list                Только вывести список песен исполнителя (название,
                             просмотры, ссылка) — без скачивания текста и аккордов.
                             С --count не задан — выводятся все найденные песни.
@@ -184,9 +192,37 @@ async function runDownload(args: Args) {
   console.log(`\n💾 Сохранено в файл: ${outputFile} (источник: ${result.source})`);
 }
 
+async function runFindByTitle(args: Args) {
+  const logProgress = args.stdout ? (m: string) => console.error(m) : (m: string) => console.log(m);
+
+  const result = await findSong({
+    title: args.title!,
+    source: args.source,
+    onProgress: logProgress,
+  });
+
+  if (result.songs.length === 0) {
+    fail("Нечего скачивать.");
+  }
+
+  const text = buildOutputFile(result.songs);
+
+  if (args.stdout) {
+    process.stdout.write(text);
+    return;
+  }
+
+  const outputFile = args.output ?? `${slugFor(args.title!)}_song.txt`;
+  await writeFile(outputFile, text, "utf-8");
+
+  console.log(`\n💾 Сохранено в файл: ${outputFile} (источник: ${result.source})`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.list) {
+  if (args.title) {
+    await runFindByTitle(args);
+  } else if (args.list) {
     await runList(args);
   } else {
     await runDownload(args);
