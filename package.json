@@ -1,0 +1,26 @@
+{
+  "name": "lyrics-scraper",
+  "version": "1.0.0",
+  "description": "Скачивает тексты песен с аккордами (amdm.ru, mytabs.ru) в единый текстовый формат. Библиотека для встраивания в Next.js-проекты + отдельный CLI.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "lyrics-scraper": "./src/cli.ts"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
