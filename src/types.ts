@@ -121,3 +121,12 @@ export interface FindSongResult {
    * исполнитель+название схлопнуты в одну. */
   songs: Song[];
 }
+
+export interface SearchSongResult {
+  title: string;
+  source: string;
+  /** Найденные совпадения (исполнитель + название + ссылка), без текста и
+   * аккордов — только метаданные. Дубликаты одной и той же пары
+   * исполнитель+название схлопнуты в одну. */
+  matches: TitleMatch[];
+}

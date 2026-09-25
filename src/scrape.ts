@@ -10,6 +10,8 @@ import type {
   ListSongsResult,
   FindSongOptions,
   FindSongResult,
+  SearchSongResult,
+  TitleMatch,
 } from "./types.js";
 import { SOURCE_IDS } from "./types.js";
 import { amdmSource } from "./sources/amdm.js";
@@ -110,29 +112,44 @@ export async function listSongs(options: ListSongsOptions): Promise<ListSongsRes
   return { artist: artistQuery, source: chosenSource.id, songs };
 }
 
-/**
- * Ищет песню по названию, без знания исполнителя (в отличие от
- * scrapeArtist/listSongs, где артист обязателен) — через сайтовый поиск
- * источника. Поддерживают не все источники (см. ChordSource.searchByTitle);
- * при автопереборе источники без поиска по названию просто пропускаются.
- *
- * Повторные записи одной и той же пары исполнитель+название (перезалитые
- * копии/варианты аранжировки одной песни) схлопываются в одну — остаётся
- * первая по релевантности сайтового поиска.
- */
-export async function findSong(options: FindSongOptions): Promise<FindSongResult> {
-  const { title, source, onProgress } = options;
-
+/** Источники, форсированные или перебираемые по очереди, у которых вообще
+ * есть сайтовый поиск по названию песни (см. ChordSource.searchByTitle). */
+function titleSearchCandidates(source: SourceId | undefined): ChordSource[] {
   if (source && !SOURCE_IDS.includes(source)) {
     throw new Error(`Неизвестный источник «${source}». Допустимые значения: ${SOURCE_IDS.join(", ")}.`);
   }
   if (source && !SOURCES[source].searchByTitle) {
     throw new Error(`Источник «${source}» не поддерживает поиск по названию песни.`);
   }
-  const candidateSources = (source ? [SOURCES[source]] : AUTO_ORDER).filter((s) => s.searchByTitle);
-  if (candidateSources.length === 0) {
+  const candidates = (source ? [SOURCES[source]] : AUTO_ORDER).filter((s) => s.searchByTitle);
+  if (candidates.length === 0) {
     throw new Error("Ни один из источников не поддерживает поиск по названию песни.");
   }
+  return candidates;
+}
+
+/** Схлопывает повторные записи одной и той же пары исполнитель+название
+ * (перезалитые копии/варианты аранжировки одной песни на сайте) в одну —
+ * остаётся первая по релевантности сайтового поиска. */
+function dedupeTitleMatches(matches: TitleMatch[]): TitleMatch[] {
+  const seen = new Set<string>();
+  return matches.filter((m) => {
+    const key = `${m.artist.toLowerCase()}|||${m.title.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Общая часть searchSong()/findSong(): перебирает источники с поддержкой
+ * поиска по названию, пока не найдёт непустой результат, и возвращает
+ * уже дедуплицированные совпадения вместе с источником, который их дал. */
+async function searchTitleAcrossSources(
+  title: string,
+  source: SourceId | undefined,
+  onProgress?: (m: string) => void,
+): Promise<{ source: ChordSource; matches: TitleMatch[] }> {
+  const candidateSources = titleSearchCandidates(source);
 
   for (const src of candidateSources) {
     onProgress?.(`🔍 [${src.id}] Ищу песню по названию: «${title}»`);
@@ -141,29 +158,55 @@ export async function findSong(options: FindSongOptions): Promise<FindSongResult
       onProgress?.(`⚠️ [${src.id}] Ничего не нашлось по названию «${title}».`);
       continue;
     }
-
-    const seen = new Set<string>();
-    const uniqueMatches = rawMatches.filter((m) => {
-      const key = `${m.artist.toLowerCase()}|||${m.title.toLowerCase()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    uniqueMatches.forEach((m, i) => onProgress?.(`  ${i + 1}. ${m.artist} — ${m.title}`));
-    onProgress?.(`\n📥 Загружаю ${uniqueMatches.length} найденных песен...`);
-
-    const songs: Song[] = [];
-    for (const m of uniqueMatches) {
-      const song = await src.fetchSong(m.url, m.artist);
-      if (song) songs.push(song);
-    }
-
-    onProgress?.(`\n🎉 Готово! Загружено песен: ${songs.length}.`);
-    return { title, source: src.id, songs };
+    return { source: src, matches: dedupeTitleMatches(rawMatches) };
   }
 
   throw new Error(`Песня «${title}» не найдена ни на одном источнике, поддерживающем поиск по названию.`);
+}
+
+/**
+ * Ищет совпадения по названию песни (или его части), без знания
+ * исполнителя — через сайтовый поиск источника, без скачивания текста и
+ * аккордов (быстрая операция, как listSongs() для исполнителя). Поддерживают
+ * не все источники (см. ChordSource.searchByTitle); при автопереборе
+ * источники без такого поиска просто пропускаются.
+ */
+export async function searchSong(options: FindSongOptions): Promise<SearchSongResult> {
+  const { title, source, onProgress } = options;
+
+  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, source, onProgress);
+
+  matches.forEach((m, i) => onProgress?.(`  ${i + 1}. ${m.artist} — ${m.title}`));
+  onProgress?.(`✅ Найдено ${matches.length} совпадений.`);
+  return { title, source: chosenSource.id, matches };
+}
+
+/**
+ * Ищет песню по названию, без знания исполнителя (в отличие от
+ * scrapeArtist/listSongs, где артист обязателен) — через сайтовый поиск
+ * источника, и сразу скачивает текст+аккорды каждого найденного совпадения.
+ * Поддерживают не все источники (см. ChordSource.searchByTitle); при
+ * автопереборе источники без поиска по названию просто пропускаются.
+ *
+ * Нужен только список совпадений (исполнитель + название), без скачивания —
+ * используйте searchSong() вместо findSong().
+ */
+export async function findSong(options: FindSongOptions): Promise<FindSongResult> {
+  const { title, onProgress } = options;
+
+  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, options.source, onProgress);
+
+  matches.forEach((m, i) => onProgress?.(`  ${i + 1}. ${m.artist} — ${m.title}`));
+  onProgress?.(`\n📥 Загружаю ${matches.length} найденных песен...`);
+
+  const songs: Song[] = [];
+  for (const m of matches) {
+    const song = await chosenSource.fetchSong(m.url, m.artist);
+    if (song) songs.push(song);
+  }
+
+  onProgress?.(`\n🎉 Готово! Загружено песен: ${songs.length}.`);
+  return { title, source: chosenSource.id, songs };
 }
 
 export async function scrapeArtist(options: ScrapeOptions): Promise<ScrapeResult> {

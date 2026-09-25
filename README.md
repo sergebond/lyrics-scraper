@@ -80,13 +80,19 @@ listing order; don't compare `views` across sources/artists.
 
 ### Find a song when you don't know the artist
 
-If you only have a song title and not the artist, use `findSong` instead of
-guessing an artist name for `scrapeArtist`. It searches the source's own
-site search by song title:
+If you only have a song title (or part of one) and not the artist, use
+`findSong`/`searchSong` instead of guessing an artist name for
+`scrapeArtist`. Both search the source's own site search by song title — an
+exact title isn't required, a partial match (e.g. "heart" instead of the
+full title) works too.
+
+`searchSong` returns just the matches (artist+title+url), no lyrics/chords —
+fast, like `listSongs` but for title search. `findSong` downloads each match:
 
 ```ts
-import { findSong } from "lyrics-scraper";
+import { findSong, searchSong } from "lyrics-scraper";
 
+const { matches } = await searchSong({ title: "сердце" }); // metadata only, fast
 const { songs } = await findSong({ title: "Шёлковое сердце" }); // Song[], usually one
 ```
 
@@ -173,13 +179,14 @@ npx tsx src/cli.ts --artist ddt --list                       # just the list of 
 npx tsx src/cli.ts --artist ddt --list --count 10 --stdout
 npx tsx src/cli.ts --title "Шёлковое сердце"                  # don't know the artist, search by title
 npx tsx src/cli.ts --title "Шёлковое сердце" --stdout
+npx tsx src/cli.ts --title "сердце" --list --stdout           # just "artist — title" matches, no downloading
 ```
 
 | Flag                    | Description |
 |--------------------------|----------|
 | `-a, --artist <name>`     | Artist (see above) |
-| `-t, --title <title>`     | Find a song by title, without knowing the artist (site search). Mutually exclusive with `--artist`/`--list`/`--songs`. Not every source supports it (currently only amdm.ru) |
-| `-l, --list`              | Only print the artist's song list (title, views, url) — no downloading |
+| `-t, --title <title>`     | Find a song by title or part of one, without knowing the artist (site search). Downloads matches; combine with `--list` for matches only, no downloading. Ignores `--artist`/`--songs`. Not every source supports it (currently only amdm.ru) |
+| `-l, --list`              | Without `--title`: just the artist's song list (title, views, url), no downloading. With `--title`: just the title-search matches (artist, title, url), no downloading |
 | `-n, --count <number>`    | How many songs to download (or list, with `--list`). Default: 20 when downloading, all when listing |
 | `-s, --songs <titles>` | One or more specific songs instead of top-N |
 | `--source <amdm\|mytabs\|guitaretab\|lacuerda>` | Force a source instead of auto-detection |

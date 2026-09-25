@@ -22,11 +22,13 @@
  *   import { listSongs } from "lyrics-scraper";
  *   const { songs } = await listSongs({ artist: "ДДТ" }); // [{ title, url, views }, ...]
  *
- * Известно название песни, но не исполнитель — используйте findSong(),
- * она ищет по названию сайтовым поиском (поддерживают не все источники):
+ * Известно название песни (или его часть), но не исполнитель — используйте
+ * findSong() (сразу скачивает) или searchSong() (только список совпадений,
+ * без скачивания — быстрее, аналог listSongs() для поиска по названию):
  *
- *   import { findSong } from "lyrics-scraper";
+ *   import { findSong, searchSong } from "lyrics-scraper";
  *   const { songs } = await findSong({ title: "Шёлковое сердце" }); // Song[], обычно одна
+ *   const { matches } = await searchSong({ title: "сердце" }); // { title, artist, url }[]
  *
  * Работает только на сервере (Route Handler, Server Action, Node-рантайм) —
  * делает исходящие HTTP-запросы и не предназначена для клиентских компонентов.
@@ -39,7 +41,7 @@
  * для редких случаев (например, принудительный source с ручным резолвингом
  * пути на mytabs.ru); в обычном использовании не нужно.
  */
-export { scrapeArtist, listSongs, findSong } from "./scrape.js";
+export { scrapeArtist, listSongs, findSong, searchSong } from "./scrape.js";
 export { formatSongBlock, formatOutputFile as buildOutputFileFromBlocks } from "./textFormat.js";
 export { amdmSource } from "./sources/amdm.js";
 export { mytabsSource, resolveArtistByPath as resolveMytabsArtistByPath } from "./sources/mytabs.js";
@@ -58,6 +60,7 @@ export type {
   TitleMatch,
   FindSongOptions,
   FindSongResult,
+  SearchSongResult,
 } from "./types.js";
 
 import type { Song, ScrapeOptions } from "./types.js";

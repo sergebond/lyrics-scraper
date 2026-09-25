@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
-import { scrapeArtist, listSongs, findSong } from "./scrape.js";
+import { scrapeArtist, listSongs, findSong, searchSong } from "./scrape.js";
 import { buildOutputFile } from "./index.js";
 import { transliterateToSlug } from "./translit.js";
 import { SOURCE_IDS, type SourceId } from "./types.js";
@@ -105,11 +105,15 @@ function printHelp() {
 Опции:
   -a, --artist <имя>       Исполнитель: имя ("Земфира") или slug/путь сайта ("zemfira").
                             Для mytabs.ru с явным путём: "v-r/viktor-tsoj". По умолчанию: "ДДТ".
-  -t, --title <название>    Найти песню по названию, без указания исполнителя
-                            (поиск по сайту). Взаимоисключающе с --artist/--list/--songs.
-                            Поддерживают не все источники (сейчас — amdm.ru).
-  -l, --list                Только вывести список песен исполнителя (название,
+  -t, --title <название>    Найти песню по названию или его части, без указания
+                            исполнителя (поиск по сайту). Скачивает найденные
+                            совпадения; с --list — только список, без скачивания.
+                            Игнорирует --artist/--songs. Поддерживают не все
+                            источники (сейчас — amdm.ru).
+  -l, --list                Без --title: только список песен исполнителя (название,
                             просмотры, ссылка) — без скачивания текста и аккордов.
+                            С --title: только список совпадений (исполнитель,
+                            название, ссылка) — без скачивания.
                             С --count не задан — выводятся все найденные песни.
   -n, --count <число>       Сколько песен скачать (или вывести списком с --list).
                             По умолчанию: 20 при скачивании, все — с --list.
@@ -192,6 +196,32 @@ async function runDownload(args: Args) {
   console.log(`\n💾 Сохранено в файл: ${outputFile} (источник: ${result.source})`);
 }
 
+async function runSearchByTitle(args: Args) {
+  const logProgress = args.stdout ? (m: string) => console.error(m) : (m: string) => console.log(m);
+
+  const result = await searchSong({
+    title: args.title!,
+    source: args.source,
+    onProgress: logProgress,
+  });
+
+  if (result.matches.length === 0) {
+    fail("Ничего не нашлось.");
+  }
+
+  if (args.stdout) {
+    const lines = result.matches.map((m, i) => `${i + 1}. ${m.artist} — ${m.title}`);
+    process.stdout.write(lines.join("\n") + "\n");
+    return;
+  }
+
+  if (args.output) {
+    const lines = result.matches.map((m, i) => `${i + 1}. ${m.artist} — ${m.title}\n   ${m.url}`);
+    await writeFile(args.output, lines.join("\n") + "\n", "utf-8");
+    console.log(`\n💾 Список сохранён в файл: ${args.output} (источник: ${result.source})`);
+  }
+}
+
 async function runFindByTitle(args: Args) {
   const logProgress = args.stdout ? (m: string) => console.error(m) : (m: string) => console.log(m);
 
@@ -220,7 +250,9 @@ async function runFindByTitle(args: Args) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.title) {
+  if (args.title && args.list) {
+    await runSearchByTitle(args);
+  } else if (args.title) {
     await runFindByTitle(args);
   } else if (args.list) {
     await runList(args);

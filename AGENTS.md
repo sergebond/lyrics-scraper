@@ -83,18 +83,29 @@ const { songs } = await listSongs({ artist: "ДДТ" }); // все песни, �
 ни просмотры, ни рейтинг) — там это просто порядок на странице исполнителя.
 Не строй логику на сравнении `views` между разными исполнителями/источниками.
 
-### Известно название песни, но не исполнитель
+### Известно название песни (или его часть), но не исполнитель
 
 Если пользователь называет только песню ("найди/скачай песню Шёлковое
-сердце") и не знает/не помнит исполнителя — используй `findSong`, а не
-`scrapeArtist` с угаданным именем исполнителя. Она ищет сайтовым поиском по
-названию:
+сердце") и не знает/не помнит исполнителя — используй `findSong`/`searchSong`,
+а не `scrapeArtist` с угаданным именем исполнителя. Они ищут сайтовым
+поиском по названию, точное совпадение не обязательно — можно передать
+и часть названия (например "сердце" вместо полного).
+
+`searchSong` — только список совпадений (исполнитель+название+ссылка), без
+скачивания текста и аккордов; `findSong` — сразу скачивает каждое найденное
+совпадение:
 
 ```ts
-interface FindSongOptions {
+interface FindSongOptions { // общий вход для findSong и searchSong
   title: string;
   source?: "amdm" | "mytabs" | "guitaretab" | "lacuerda"; // источник должен уметь искать по названию
   onProgress?: (message: string) => void;
+}
+
+interface SearchSongResult {
+  title: string;
+  source: string;
+  matches: { title: string; artist: string; url: string }[]; // без текста/аккордов
 }
 
 interface FindSongResult {
@@ -105,9 +116,10 @@ interface FindSongResult {
 ```
 
 ```ts
-import { findSong } from "lyrics-scraper";
+import { findSong, searchSong } from "lyrics-scraper";
 
-const { songs } = await findSong({ title: "Шёлковое сердце" });
+const { matches } = await searchSong({ title: "сердце" }); // только список, быстро
+const { songs } = await findSong({ title: "Шёлковое сердце" }); // сразу текст+аккорды
 ```
 
 Поиск по названию поддерживают не все источники (сейчас — только amdm.ru);
@@ -181,6 +193,7 @@ npx tsx src/cli.ts --artist ddt --list                       # только сп
 npx tsx src/cli.ts --artist ddt --list --count 10 --stdout
 npx tsx src/cli.ts --title "Шёлковое сердце"                  # исполнитель не известен, ищем по названию
 npx tsx src/cli.ts --title "Шёлковое сердце" --stdout
+npx tsx src/cli.ts --title "сердце" --list --stdout           # только список "исполнитель — название", без скачивания
 ```
 
 По умолчанию результат — файл `<slug>_songs.txt` (или указанный через
@@ -225,6 +238,7 @@ npx tsx src/cli.ts --title "Шёлковое сердце" --stdout
    исполнителя (без скачивания) — используй `listSongs`, а не `scrapeArtist`
    с большим `count`: она быстрее (не ходит по страницам отдельных песен) и
    явно сигнализирует намерение «только список».
-7. Если исполнитель не известен, а известно только название песни — используй
-   `findSong`, а не пытайся угадать/подставить произвольного исполнителя в
-   `scrapeArtist`.
+7. Если исполнитель не известен, а известно только название песни (или его
+   часть) — используй `findSong`/`searchSong`, а не пытайся угадать/подставить
+   произвольного исполнителя в `scrapeArtist`. Если нужен только список
+   совпадений, без скачивания — `searchSong`, а не `findSong`.
