@@ -1,26 +1,26 @@
 # lyrics-scraper
 
-Скачивает тексты песен с аккордами с [amdm.ru](https://amdm.ru),
-[mytabs.ru](https://mytabs.ru) (русско-/украиноязычные исполнители),
-[guitaretab.com](https://www.guitaretab.com) (англоязычные) и
-[acordes.lacuerda.net](https://acordes.lacuerda.net) (испаноязычные), и
-приводит их к единому текстовому формату (см. «Формат вывода» ниже).
-Работает как библиотека, которую можно подключить в Next.js-проект
-(Route Handler / Server Action), так и как самостоятельный CLI.
+Downloads song lyrics with chords from [amdm.ru](https://amdm.ru),
+[mytabs.ru](https://mytabs.ru) (Russian-/Ukrainian-language artists),
+[guitaretab.com](https://www.guitaretab.com) (English-language) and
+[acordes.lacuerda.net](https://acordes.lacuerda.net) (Spanish-language), and
+converts them to a single unified text format (see "Output format" below).
+Works both as a library you can plug into a Next.js project (Route Handler /
+Server Action) and as a standalone CLI.
 
-Требует Node.js 18+ (нужен встроенный `fetch`). Запросы делаются только на
-сервере — модуль не предназначен для клиентских компонентов.
+Requires Node.js 18+ (needs the built-in `fetch`). Requests are made
+server-side only — the module is not meant for client components.
 
-## Установка
+## Install
 
 ```bash
 npm install
 ```
 
-## Использование как модуля (в Next.js)
+## Using it as a module (in Next.js)
 
-Самый короткий путь — `getSongsText`: один вызов, сразу текст, ничего не
-пишется на диск.
+The shortest path is `getSongsText`: one call, text right away, nothing
+written to disk.
 
 ```ts
 // app/api/songs/route.ts
@@ -29,7 +29,7 @@ import { getSongsText } from "lyrics-scraper";
 export async function POST(req: Request) {
   const { artist, count } = await req.json();
 
-  const text = await getSongsText({ artist, count }); // строка
+  const text = await getSongsText({ artist, count }); // a string
 
   return new Response(text, {
     headers: {
@@ -40,84 +40,86 @@ export async function POST(req: Request) {
 }
 ```
 
-Если, помимо текста, нужны ещё и метаданные (какой источник реально
-использовался, какие из `songs` не нашлись) — `getSongsText` это просто
-`scrapeArtist` + `buildOutputFile`, можно вызвать их по отдельности:
+If you also need metadata (which source was actually used, which of the
+`songs` weren't found) — `getSongsText` is just `scrapeArtist` +
+`buildOutputFile`, you can call them separately:
 
 ```ts
 import { scrapeArtist, buildOutputFile } from "lyrics-scraper";
 
 const result = await scrapeArtist({ artist, count });
-// result.source — какой сайт реально использовался ("amdm" | "mytabs" | "guitaretab" | "lacuerda")
-// result.notFound — какие из songs не нашлись (если передавались songs)
+// result.source — which site was actually used ("amdm" | "mytabs" | "guitaretab" | "lacuerda")
+// result.notFound — which of songs weren't found (if songs was passed)
 
-const text = buildOutputFile(result.songs); // то же самое, что вернул бы getSongsText
+const text = buildOutputFile(result.songs); // same as what getSongsText would return
 ```
 
-Ни `getSongsText`, ни `scrapeArtist`, ни `buildOutputFile` не пишут файлы —
-запись на диск есть только в CLI (`-o/--output`, см. ниже).
+Neither `getSongsText`, `scrapeArtist`, nor `buildOutputFile` write files —
+disk writes only happen in the CLI (`-o/--output`, see below).
 
-`scrapeArtist` сама определяет, откуда качать: перебирает источники по
-очереди — **amdm.ru → mytabs.ru → guitaretab.com → acordes.lacuerda.net** —
-и останавливается на первом, где исполнитель нашёлся и у него есть песни.
-Так, например, для «ДДТ» результат придёт с amdm.ru, для «Кино» (все подборы
-которого удалены с amdm.ru по требованию правообладателя) — с mytabs.ru
-(если передать точный путь, см. ниже), а для «Metallica» — с того источника,
-что откликнется первым (в данном случае обычно amdm.ru — там тоже есть
-зарубежный рок). При необходимости источник можно форсировать через
-`source`.
+`scrapeArtist` figures out on its own where to download from: it tries
+sources in order — **amdm.ru → mytabs.ru → guitaretab.com →
+acordes.lacuerda.net** — and stops at the first one where the artist is
+found and has songs. So, for example, for "ДДТ" the result comes from
+amdm.ru, for "Кино" (whose entire catalog was removed from amdm.ru at the
+rightsholder's request) — from mytabs.ru (if you pass the exact path, see
+below), and for "Metallica" — from whichever source responds first (usually
+amdm.ru in this case — it also carries a lot of foreign rock). You can force
+a specific source via `source` if needed.
 
-### Опции `scrapeArtist`
+### `scrapeArtist` options
 
-| Поле         | Тип                        | По умолчанию | Описание |
-|--------------|-----------------------------|--------------|----------|
-| `artist`     | `string`                    | —            | Имя исполнителя (любым языком) или slug/путь сайта |
-| `count`      | `number`                    | `20`         | Сколько самых популярных песен взять. Игнорируется при `songs` |
-| `songs`      | `string[]`                  | —            | Конкретная песня/список песен по названию вместо топ-N |
-| `source`     | `"amdm" \| "mytabs" \| "guitaretab" \| "lacuerda"` | автоперебор всех четырёх | Форсировать конкретный источник вместо автоопределения |
-| `onProgress` | `(message: string) => void` | —            | Коллбек прогресса — удобно стримить в UI |
+| Field        | Type                        | Default | Description |
+|--------------|-----------------------------|---------|--------------|
+| `artist`     | `string`                    | —       | Artist name (any language) or a site slug/path |
+| `count`      | `number`                    | `20`    | How many of the most popular songs to fetch. Ignored if `songs` is set |
+| `songs`      | `string[]`                  | —       | A specific song / list of songs by title, instead of top-N |
+| `source`     | `"amdm" \| "mytabs" \| "guitaretab" \| "lacuerda"` | auto (tries all four) | Force a specific source instead of auto-detection |
+| `onProgress` | `(message: string) => void` | —       | Progress callback — handy for streaming to a UI |
 
-### Особые случаи резолвинга исполнителя
+### Special cases in artist resolution
 
-- **amdm.ru**: имя транслитерируется в slug (несколько вариантов схемы, включая
-  случай "ы" → "i"), а при неудаче — ищется через `/search/` сайта.
-- **mytabs.ru**: аналогично транслитерируется (через дефис), но часть
-  исполнителей каталогизирована там под именем человека, а не сценическим
-  названием — например «Кино» лежит под `viktor-tsoj`. Для таких случаев
-  передавайте `artist` как путь с `/`, например:
+- **amdm.ru**: the name is transliterated into a slug (a few scheme
+  variants are tried, including "ы" → "i"), and on failure it's looked up
+  via the site's `/search/`.
+- **mytabs.ru**: transliterated the same way (hyphen-joined), but some
+  artists are catalogued there under a person's name rather than the stage
+  name — for example "Кино" lives at `viktor-tsoj`. For such cases pass
+  `artist` as a path with `/`, e.g.:
 
   ```ts
   await scrapeArtist({ artist: "v-r/viktor-tsoj", source: "mytabs", count: 20 });
   ```
 
-  (буквенный префикс папки на mytabs.ru сервер не проверяет — подойдёт
-  любой; используйте реальный, если он вам известен, иначе просто `x/slug`).
+  (the letter-range folder prefix in the mytabs.ru path isn't actually
+  checked by the server — any value works; use the real one if you know it,
+  otherwise just `x/slug`).
 
-- **guitaretab.com**: резолвится через встроенный поиск сайта
-  (`/fetch/?type=tab&query=...`), потому что буквенный путь исполнителя не
-  всегда совпадает с первой буквой имени (например "The Beatles" лежит под
-  `/b/beatles/`, отбрасывая "The"). Берутся только подборы с суффиксом
-  "chords" (не "tab"/"bass"/"drum" — те без текста песни). Популярность —
-  число оценок (`gt-rating__counter`), сайт не публикует прямой счётчик
-  просмотров.
-- **lacuerda.net**: slug — латиница/транслитерация с "_" (как и у
-  amdm.ru/mytabs.ru). Сайт **не публикует ни счётчик просмотров, ни
-  рейтинг** на странице исполнителя, поэтому "топ-N" здесь на самом деле —
-  первые N песен в порядке, в котором они перечислены на странице
-  исполнителя (не настоящая популярность). Часть песен использует
-  сольфеджио (Do-Re-Mi-Fa-Sol-La-Si) вместо латинских букв — аккорды в
-  тексте не трогаются (остаются как в источнике), но для определения
-  «Тональность:» сольфеджио распознаётся отдельно.
+- **guitaretab.com**: resolved through the site's built-in search
+  (`/fetch/?type=tab&query=...`), because the artist's letter-path doesn't
+  always match the first letter of their name (e.g. "The Beatles" lives at
+  `/b/beatles/`, dropping "The"). Only entries suffixed "chords" are taken
+  (not "tab"/"bass"/"drum" — those have no song lyrics). Popularity is the
+  rating count (`gt-rating__counter`); the site doesn't publish a direct
+  view counter.
+- **lacuerda.net**: slug is Latin-script/transliterated with "_" (same as
+  amdm.ru/mytabs.ru). The site **publishes neither a view counter nor a
+  rating** on the artist page, so "top-N" here really means the first N
+  songs in the order they're listed on the artist page (not actual
+  popularity). Some songs use solfège notation (Do-Re-Mi-Fa-Sol-La-Si)
+  instead of Latin letters — chords in the text are left untouched (kept as
+  in the source), but solfège is recognized separately for determining
+  "Тональность:" (key).
 
-### Английские и испанские метки разделов
+### English and Spanish section labels
 
-Для guitaretab.com/lacuerda.net `formatBody` получает свои наборы меток
-(`Verse`/`Chorus`/`Bridge`/... и `Estrofa`/`Coro`/`Puente`/... соответственно)
-через `FormatBodyOptions.extraLabelWords`, а нумеруются («Verse 1:», «Verse
-2:», ...) — через `numberedLabelWords`. Для amdm.ru/mytabs.ru поведение не
-меняется (нумеруется только «Куплет», как и раньше).
+For guitaretab.com/lacuerda.net, `formatBody` gets its own set of labels
+(`Verse`/`Chorus`/`Bridge`/... and `Estrofa`/`Coro`/`Puente`/... respectively)
+via `FormatBodyOptions.extraLabelWords`, and numbering ("Verse 1:", "Verse
+2:", ...) via `numberedLabelWords`. Behavior for amdm.ru/mytabs.ru is
+unchanged (only "Куплет" is numbered, as before).
 
-## Использование как CLI
+## Using it as a CLI
 
 ```bash
 npx tsx src/cli.ts --artist ДДТ --count 20
@@ -127,67 +129,71 @@ npx tsx src/cli.ts --artist "v-r/viktor-tsoj" --source mytabs --count 20
 npx tsx src/cli.ts --artist Radiohead --source guitaretab --count 20
 npx tsx src/cli.ts --artist Shakira --source lacuerda --count 10
 npx tsx src/cli.ts --artist ddt --count 5 --output my_file.txt
-npx tsx src/cli.ts --artist ddt --count 5 --stdout          # текст в stdout, файл не создаётся
+npx tsx src/cli.ts --artist ddt --count 5 --stdout          # text to stdout, no file created
 ```
 
-| Флаг                    | Описание |
+| Flag                    | Description |
 |--------------------------|----------|
-| `-a, --artist <имя>`     | Исполнитель (см. выше) |
-| `-n, --count <число>`    | Сколько самых популярных песен скачать (по умолчанию 20) |
-| `-s, --songs <названия>` | Одна или несколько конкретных песен вместо топ-N |
-| `--source <amdm\|mytabs\|guitaretab\|lacuerda>` | Форсировать источник вместо автоопределения |
-| `-o, --output <файл>`    | Имя выходного файла (по умолчанию `<slug>_songs.txt`) |
-| `--stdout`               | Вывести текст в stdout вместо записи в файл (прогресс уходит в stderr) |
+| `-a, --artist <name>`     | Artist (see above) |
+| `-n, --count <number>`    | How many of the most popular songs to download (default 20) |
+| `-s, --songs <titles>` | One or more specific songs instead of top-N |
+| `--source <amdm\|mytabs\|guitaretab\|lacuerda>` | Force a source instead of auto-detection |
+| `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`) |
+| `--stdout`               | Print text to stdout instead of writing a file (progress goes to stderr) |
 
-## Формат вывода
+## Output format
 
 ```
-Название: Пример песни
-Исполнитель: Пример исполнителя
+Название: Sample song
+Исполнитель: Sample artist
 Тональность: Am
-Источник: https://example.com/primer
+Источник: https://example.com/sample
 
 Куплет 1:
 Am          C
-Первая строка текста
+First line of text
 F           G
-Вторая строка текста
+Second line of text
 
 Припев:
 Am F
 C  G
 ========================================
-Название: Вторая песня
+Название: Second song
 ...
 ```
 
-- UTF-8, переводы строк LF, без табов и висячих пробелов.
-- Ровно 40 знаков `=` между песнями, без разделителя перед первой.
-- Метки разделов без квадратных скобок, аккорды — отдельной строкой над
-  текстом, с сохранением горизонтального выравнивания.
-- Альтернативные аккорды в скобках разносятся через пробел (`Am (A7)` →
-  `Am A7`), пояснительные комментарии в скобках убираются.
-- Гитарная табулатура убирается — остаются только текст и аккорды.
+- UTF-8, LF line endings, no tabs or trailing whitespace.
+- Exactly 40 `=` characters between songs, no separator before the first one.
+- Section labels with no square brackets; chords on their own line above
+  the text, preserving horizontal alignment.
+- Alternate chords in parentheses are spread out with a space (`Am (A7)` →
+  `Am A7`); explanatory comments in parentheses are removed.
+- Guitar tab notation is stripped — only lyrics and chords remain.
 
-## Структура
+(Field names in the output — `Название`, `Исполнитель`, `Тональность`,
+`Источник`, and the section labels — stay in Russian; that's the fixed
+output format's contract, not a translation artifact.)
+
+## Structure
 
 ```
 src/
-  types.ts        — общие типы (Song, ChordSource, ScrapeOptions, ...)
-  textFormat.ts    — ядро форматирования текста (общее для всех источников)
-  translit.ts      — транслитерация кириллицы в slug
-  select.ts        — дедупликация/выбор топ-N или конкретных песен
-  http.ts          — общий fetch с заголовками и таймаутом
+  types.ts        — shared types (Song, ChordSource, ScrapeOptions, ...)
+  textFormat.ts    — text-formatting core (shared across all sources)
+  translit.ts      — Cyrillic-to-Latin slug transliteration
+  select.ts        — dedup/selection of top-N or specific songs
+  http.ts          — shared fetch with headers and timeout
   sources/
-    amdm.ts        — адаптер amdm.ru
-    mytabs.ts      — адаптер mytabs.ru
-    guitaretab.ts  — адаптер guitaretab.com
-    lacuerda.ts    — адаптер acordes.lacuerda.net
-  scrape.ts        — оркестратор: перебор источников, выбор, загрузка
-  index.ts         — публичный API модуля
-  cli.ts           — точка входа для автономного запуска
+    amdm.ts        — amdm.ru adapter
+    mytabs.ts      — mytabs.ru adapter
+    guitaretab.ts  — guitaretab.com adapter
+    lacuerda.ts    — acordes.lacuerda.net adapter
+  scrape.ts        — orchestrator: source fallthrough, selection, fetching
+  index.ts         — the module's public API
+  cli.ts           — standalone entry point
 ```
 
-Добавить новый сайт-источник — значит реализовать интерфейс `ChordSource`
-(`resolveArtist`, `listEntries`, `fetchSong`) в `src/sources/` и добавить его
-в `AUTO_ORDER` в `scrape.ts`.
+To add a new source site, implement the `ChordSource` interface
+(`resolveArtist`, `listEntries`, `fetchSong`) in `src/sources/` and add it
+to `AUTO_ORDER` in `scrape.ts`.
