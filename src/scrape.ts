@@ -19,6 +19,7 @@ import { mytabsSource } from "./sources/mytabs.js";
 import { guitaretabSource } from "./sources/guitaretab.js";
 import { lacuerdaSource } from "./sources/lacuerda.js";
 import { selectTop, selectRequested, dedupeBestByTitle } from "./select.js";
+import { withActionLog, type Trace } from "./actionLog.js";
 
 const SOURCES: Record<SourceId, ChordSource> = {
   amdm: amdmSource,
@@ -64,7 +65,8 @@ async function tryResolveOnSource(
 async function resolveAcrossSources(
   artistQuery: string,
   source: SourceId | undefined,
-  onProgress?: (m: string) => void,
+  onProgress: ((m: string) => void) | undefined,
+  trace: Trace,
 ): Promise<Resolved> {
   if (source && !SOURCE_IDS.includes(source)) {
     // Защита от невалидного значения, если вызывающий код обошёл проверку
@@ -76,6 +78,7 @@ async function resolveAcrossSources(
   for (const src of candidateSources) {
     const resolved = await tryResolveOnSource(src, artistQuery, onProgress);
     if (resolved) return resolved;
+    trace.missedSources.push(src.id);
     onProgress?.(`⚠️ [${src.id}] Исполнитель «${artistQuery}» не найден или у него нет песен.`);
   }
 
@@ -99,10 +102,20 @@ async function resolveAcrossSources(
  * (см. lacuerda.ts). Сортировка по views на этом источнике даёт "как
  * перечислено на сайте", а не "от самой популярной".
  */
-export async function listSongs(options: ListSongsOptions): Promise<ListSongsResult> {
+export function listSongs(options: ListSongsOptions): Promise<ListSongsResult> {
+  const { artist, count, source } = options;
+  return withActionLog(
+    "listSongs",
+    { artist, count, source },
+    (trace) => listSongsImpl(options, trace),
+    (r) => ({ source: r.source, resultCount: r.songs.length }),
+  );
+}
+
+async function listSongsImpl(options: ListSongsOptions, trace: Trace): Promise<ListSongsResult> {
   const { artist: artistQuery, count, source, onProgress } = options;
 
-  const { source: chosenSource, entries } = await resolveAcrossSources(artistQuery, source, onProgress);
+  const { source: chosenSource, entries } = await resolveAcrossSources(artistQuery, source, onProgress, trace);
 
   const ranked = [...dedupeBestByTitle(entries).values()].sort((a, b) => b.views - a.views);
   const songs = count !== undefined ? ranked.slice(0, count) : ranked;
@@ -147,7 +160,8 @@ function dedupeTitleMatches(matches: TitleMatch[]): TitleMatch[] {
 async function searchTitleAcrossSources(
   title: string,
   source: SourceId | undefined,
-  onProgress?: (m: string) => void,
+  onProgress: ((m: string) => void) | undefined,
+  trace: Trace,
 ): Promise<{ source: ChordSource; matches: TitleMatch[] }> {
   const candidateSources = titleSearchCandidates(source);
 
@@ -155,6 +169,7 @@ async function searchTitleAcrossSources(
     onProgress?.(`🔍 [${src.id}] Ищу песню по названию: «${title}»`);
     const rawMatches = await src.searchByTitle!(title);
     if (rawMatches.length === 0) {
+      trace.missedSources.push(src.id);
       onProgress?.(`⚠️ [${src.id}] Ничего не нашлось по названию «${title}».`);
       continue;
     }
@@ -171,10 +186,20 @@ async function searchTitleAcrossSources(
  * не все источники (см. ChordSource.searchByTitle); при автопереборе
  * источники без такого поиска просто пропускаются.
  */
-export async function searchSong(options: FindSongOptions): Promise<SearchSongResult> {
+export function searchSong(options: FindSongOptions): Promise<SearchSongResult> {
+  const { title, source } = options;
+  return withActionLog(
+    "searchSong",
+    { title, source },
+    (trace) => searchSongImpl(options, trace),
+    (r) => ({ source: r.source, resultCount: r.matches.length }),
+  );
+}
+
+async function searchSongImpl(options: FindSongOptions, trace: Trace): Promise<SearchSongResult> {
   const { title, source, onProgress } = options;
 
-  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, source, onProgress);
+  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, source, onProgress, trace);
 
   matches.forEach((m, i) => onProgress?.(`  ${i + 1}. ${m.artist} — ${m.title}`));
   onProgress?.(`✅ Найдено ${matches.length} совпадений.`);
@@ -191,10 +216,20 @@ export async function searchSong(options: FindSongOptions): Promise<SearchSongRe
  * Нужен только список совпадений (исполнитель + название), без скачивания —
  * используйте searchSong() вместо findSong().
  */
-export async function findSong(options: FindSongOptions): Promise<FindSongResult> {
+export function findSong(options: FindSongOptions): Promise<FindSongResult> {
+  const { title, source } = options;
+  return withActionLog(
+    "findSong",
+    { title, source },
+    (trace) => findSongImpl(options, trace),
+    (r) => ({ source: r.source, resultCount: r.songs.length }),
+  );
+}
+
+async function findSongImpl(options: FindSongOptions, trace: Trace): Promise<FindSongResult> {
   const { title, onProgress } = options;
 
-  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, options.source, onProgress);
+  const { source: chosenSource, matches } = await searchTitleAcrossSources(title, options.source, onProgress, trace);
 
   matches.forEach((m, i) => onProgress?.(`  ${i + 1}. ${m.artist} — ${m.title}`));
   onProgress?.(`\n📥 Загружаю ${matches.length} найденных песен...`);
@@ -209,10 +244,20 @@ export async function findSong(options: FindSongOptions): Promise<FindSongResult
   return { title, source: chosenSource.id, songs };
 }
 
-export async function scrapeArtist(options: ScrapeOptions): Promise<ScrapeResult> {
+export function scrapeArtist(options: ScrapeOptions): Promise<ScrapeResult> {
+  const { artist, count, songs, source } = options;
+  return withActionLog(
+    "scrapeArtist",
+    { artist, count, songs, source },
+    (trace) => scrapeArtistImpl(options, trace),
+    (r) => ({ source: r.source, resultCount: r.songs.length, notFound: r.notFound }),
+  );
+}
+
+async function scrapeArtistImpl(options: ScrapeOptions, trace: Trace): Promise<ScrapeResult> {
   const { artist: artistQuery, count = 20, songs: requestedSongs, source, onProgress } = options;
 
-  const { source: chosenSource, artist, entries } = await resolveAcrossSources(artistQuery, source, onProgress);
+  const { source: chosenSource, artist, entries } = await resolveAcrossSources(artistQuery, source, onProgress, trace);
 
   let selectedEntries: SongEntry[];
   let notFound: string[] = [];

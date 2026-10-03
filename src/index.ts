@@ -30,6 +30,12 @@
  *   const { songs } = await findSong({ title: "Шёлковое сердце" }); // Song[], обычно одна
  *   const { matches } = await searchSong({ title: "сердце" }); // { title, artist, url }[]
  *
+ * Журнал действий (опционально, по умолчанию выключен): configureActionLog({ dir })
+ * или переменная окружения LYRICS_SCRAPER_LOG_DIR — тогда каждое обращение к
+ * scrapeArtist/listSongs/findSong/searchSong пишет краткую JSON-строку (что
+ * запросили, какой источник ответил, сколько результатов, ошибка) в
+ * <dir>/actions-ГГГГ-ММ-ДД.jsonl; файлы старше 5 дней удаляются сами.
+ *
  * Работает только на сервере (Route Handler, Server Action, Node-рантайм) —
  * делает исходящие HTTP-запросы и не предназначена для клиентских компонентов.
  * Ни scrapeArtist, ни buildOutputFile, ни getSongsText, ни listSongs не
@@ -42,6 +48,8 @@
  * пути на mytabs.ru); в обычном использовании не нужно.
  */
 export { scrapeArtist, listSongs, findSong, searchSong } from "./scrape.js";
+export { configureActionLog } from "./actionLog.js";
+export type { ActionLogConfig, ActionLogEntry } from "./actionLog.js";
 export { formatSongBlock, formatOutputFile as buildOutputFileFromBlocks } from "./textFormat.js";
 export { amdmSource } from "./sources/amdm.js";
 export { mytabsSource, resolveArtistByPath as resolveMytabsArtistByPath } from "./sources/mytabs.js";

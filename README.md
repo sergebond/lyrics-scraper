@@ -193,6 +193,35 @@ npx tsx src/cli.ts --title "сердце" --list --stdout           # just "arti
 | `-o, --output <file>`    | Output file name (default `<slug>_songs.txt`, or `<slug>_song.txt` with `--title`) |
 | `--stdout`               | Print text to stdout instead of writing a file (progress goes to stderr) |
 
+## Action log (optional)
+
+Off by default. Turn it on to see what people search for and where search
+fails — set `LYRICS_SCRAPER_LOG_DIR=/some/dir`, or call at app startup:
+
+```ts
+import { configureActionLog } from "lyrics-scraper";
+
+configureActionLog({ dir: "./logs" }); // retentionDays optional, default 5
+```
+
+Every call to `scrapeArtist` / `listSongs` / `findSong` / `searchSong` appends
+one JSON line to `<dir>/actions-YYYY-MM-DD.jsonl` (UTC dates):
+
+```json
+{"ts":"...","action":"listSongs","input":{"artist":"Виктор Цой","count":1},"ok":true,"source":"mytabs","resultCount":1,"missedSources":["amdm"],"durationMs":1486}
+```
+
+Fields: `input` (what was asked), `ok`, `source` (which site answered),
+`resultCount`, `notFound` (requested songs that weren't found),
+`missedSources` (sources tried in vain first), `error`, `durationMs`. Lyrics
+are never logged. Files are kept for 5 calendar days (today + the previous 4)
+and older ones are deleted automatically on the first write of each day
+(`retentionDays` / `LYRICS_SCRAPER_LOG_RETENTION_DAYS` to change). A logging
+failure never breaks a search. On serverless hosts the filesystem is
+read-only or ephemeral — use a writable dir like `/tmp` and expect it to be
+short-lived. Only calls into this module are logged; clicks and navigation
+on your site need to be logged by the app itself.
+
 ## Output format
 
 ```
