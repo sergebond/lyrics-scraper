@@ -1,16 +1,22 @@
 import * as cheerio from "cheerio";
 import type { ChordSource, ResolvedArtist, Song, SongEntry, TitleMatch } from "../types.js";
-import { fetchText, sleep } from "../http.js";
-import { slugCandidates } from "../translit.js";
+import { fetchPage, fetchText, sleep } from "../http.js";
+import { slugCandidates, nameKey } from "../translit.js";
 import { removeTabs, formatBody, detectKey } from "../textFormat.js";
 
 const BASE_URL = "https://amdm.ru";
 
-async function artistPageHasSongs(url: string): Promise<boolean> {
-  const html = await fetchText(url);
-  if (!html) return false;
-  const $ = cheerio.load(html);
-  return $("table tr a.g-link").length > 0;
+/** Загружает страницу исполнителя и, если на ней есть песни, возвращает
+ * канонический slug. Сайт может редиректить альтернативный slug на
+ * основной (konstantin_nikolskiy -> nikolskiy_konstantin), а ссылки на
+ * песни содержат именно основной — поэтому slug берём из итогового URL. */
+async function fetchArtistSlug(slug: string): Promise<string | null> {
+  const page = await fetchPage(`${BASE_URL}/akkordi/${slug}/`);
+  if (!page) return null;
+  const $ = cheerio.load(page.text);
+  if ($("table tr a.g-link").length === 0) return null;
+  const canonical = /\/akkordi\/([a-z0-9_]+)\/?$/.exec(new URL(page.finalUrl).pathname);
+  return canonical ? canonical[1] : slug;
 }
 
 async function searchArtistSlug(name: string): Promise<string | null> {
@@ -23,7 +29,7 @@ async function searchArtistSlug(name: string): Promise<string | null> {
     if (found) return;
     const href = $(el).attr("href") ?? "";
     const m = pattern.exec(href);
-    if (m && $(el).text().trim().toLowerCase() === name.trim().toLowerCase()) {
+    if (m && nameKey($(el).text()) === nameKey(name)) {
       found = m[1];
     }
   });
@@ -37,17 +43,17 @@ async function resolveArtist(query: string): Promise<ResolvedArtist | null> {
     : slugCandidates(candidate, "_");
 
   for (const slug of candidates) {
-    const url = `${BASE_URL}/akkordi/${slug}/`;
-    if (await artistPageHasSongs(url)) {
-      return { id: slug, url, displayName: query };
+    const canonical = await fetchArtistSlug(slug);
+    if (canonical) {
+      return { id: canonical, url: `${BASE_URL}/akkordi/${canonical}/`, displayName: query };
     }
   }
 
   const foundSlug = await searchArtistSlug(candidate);
   if (foundSlug) {
-    const url = `${BASE_URL}/akkordi/${foundSlug}/`;
-    if (await artistPageHasSongs(url)) {
-      return { id: foundSlug, url, displayName: query };
+    const canonical = await fetchArtistSlug(foundSlug);
+    if (canonical) {
+      return { id: canonical, url: `${BASE_URL}/akkordi/${canonical}/`, displayName: query };
     }
   }
 

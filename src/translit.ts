@@ -31,13 +31,29 @@ export function transliterateToSlug(text: string, separator: string, overrides: 
 
 /** Варианты slug'а для попытки: основная схема плюс известные вариации
  * (некоторые исполнители транслитерируют "ы" как "i", а не "y" —
- * "Океан Эльзи" вместо "Океан Эльзы"). */
+ * "Океан Эльзи" вместо "Океан Эльзы") и, для имён из 2–3 слов, обратный
+ * порядок слов: сайты нередко держат людей как "Фамилия Имя"
+ * ("nikolskiy_konstantin"), а пользователь вводит "Имя Фамилия". Прямой
+ * порядок всегда пробуется первым, чтобы не менять поведение там, где оно
+ * уже работало. */
 export function slugCandidates(text: string, separator: string): string[] {
   const variants: Record<string, string>[] = [{}, { ы: "i" }, { й: "i", ы: "i" }];
+  const words = text.trim().split(/\s+/);
+  const orders = [text];
+  if (words.length >= 2 && words.length <= 3) orders.push([...words].reverse().join(" "));
+
   const seen: string[] = [];
-  for (const overrides of variants) {
-    const slug = transliterateToSlug(text, separator, overrides);
-    if (slug && !seen.includes(slug)) seen.push(slug);
+  for (const order of orders) {
+    for (const overrides of variants) {
+      const slug = transliterateToSlug(order, separator, overrides);
+      if (slug && !seen.includes(slug)) seen.push(slug);
+    }
   }
   return seen;
+}
+
+/** Ключ имени, не зависящий от регистра и порядка слов — для сравнения
+ * "Константин Никольский" и "Никольский Константин". */
+export function nameKey(name: string): string {
+  return name.toLowerCase().split(/\s+/).filter(Boolean).sort().join(" ");
 }

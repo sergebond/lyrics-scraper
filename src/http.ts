@@ -8,11 +8,12 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** GET-запрос с общими заголовками и таймаутом. Возвращает null при ошибке сети/статусе. */
-export async function fetchText(
+/** GET-запрос с общими заголовками и таймаутом. Возвращает текст и итоговый
+ * URL (после редиректов), либо null при ошибке сети/статусе. */
+export async function fetchPage(
   url: string,
   init: { timeoutMs?: number; params?: Record<string, string> } = {},
-): Promise<string | null> {
+): Promise<{ text: string; finalUrl: string } | null> {
   const { timeoutMs = 10_000, params } = init;
   const target = params ? `${url}?${new URLSearchParams(params).toString()}` : url;
   const controller = new AbortController();
@@ -20,10 +21,18 @@ export async function fetchText(
   try {
     const response = await fetch(target, { headers: HEADERS, signal: controller.signal });
     if (!response.ok) return null;
-    return await response.text();
+    return { text: await response.text(), finalUrl: response.url };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Как fetchPage, но возвращает только текст. */
+export async function fetchText(
+  url: string,
+  init: { timeoutMs?: number; params?: Record<string, string> } = {},
+): Promise<string | null> {
+  return (await fetchPage(url, init))?.text ?? null;
 }
